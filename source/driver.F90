@@ -9,9 +9,10 @@
     use GeneralSetup
     use DataLikelihoodList
     use RandUtils
-    use bbn
     implicit none
-
+!modified
+    integer model
+!modified
     character(LEN=:), allocatable :: LogFileName,  numstr, fname, rootdir
     character(LEN=:), allocatable :: InputFile, test_output_root, test_used_params
     Type(TSettingIni) :: Ini
@@ -27,7 +28,7 @@
     logical :: estimate_propose_matrix = .false.
     real(mcp), allocatable :: test_paramvals(:)
     real(mcp) :: test_check_compare = logZero
-
+    
 #ifdef MPI
     integer ierror
 
@@ -77,8 +78,12 @@
 
     call Ini%Read('accuracy_level',AccuracyLevel)
     call Ini%Read('stop_on_error',stop_on_error)
-    if (Ini%HasKey('BBN_data_file')) BBN_YHe%BBN_data_file = Ini%Read_String_Default('BBN_data_file',BBN_YHe%BBN_data_file)
-
+!modified
+    call Ini%Read('model',model)
+    print*,'----------'
+    print*,'model',model
+    print*,'----------'
+!modified
     baseroot = Ini%ReadFileName('file_root', NotFoundFail = .true.)
     if(instance<=1) then
         write(*,*) 'file_root:'//baseroot

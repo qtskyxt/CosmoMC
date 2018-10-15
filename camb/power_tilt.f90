@@ -60,6 +60,12 @@
         real(dl) k_0_scalar, k_0_tensor !pivot scales
         real(dl) ScalarPowerAmp(nnmax)
         real(dl) TensorPowerAmp(nnmax) !A_T at k_0_tensor if tensor_parameterization==tensor_param_AT
+
+!modified
+        real(dl) N_star, xi0, c_H, phi_c, Ld, n0
+        integer model
+!modified
+
     end Type InitialPowerParams
 
     real(dl) curv  !Curvature contant, set in InitializePowers
@@ -128,14 +134,38 @@
     !< |\Delta(x)|^2 > = \int dk/k ScalarPower(k)
     !For the isocurvture velocity mode ScalarPower is the power in the neutrino heat flux.
 
+!modified
+    real(dl) F_V, F_M, phi
+    real(dl) phi_star, pi, G, A_s, n_s, M_p
+!modified
     real(dl) ScalarPower,k, lnrat
     integer ix
 
     lnrat = log(k/P%k_0_scalar)
-    ScalarPower=P%ScalarPowerAmp(ix)*exp(lnrat*( P%an(ix)-1 + lnrat*(P%n_run(ix)/2 + P%n_runrun(ix)/6*lnrat)))
+!  ScalarPower=P%ScalarPowerAmp(ix)*exp(lnrat*( P%an(ix)-1 + lnrat*(P%n_run(ix)/2 + P%n_runrun(ix)/6*lnrat)))
 
     !         ScalarPower = ScalarPower * (1 + 0.1*cos( lnrat*30 ) )
 
+!modified
+    pi=3.14159265d0
+    G=6.67428d-11
+    M_p=1d0
+    phi_star=sqrt(P%n0/2*(4*P%N_star+P%n0)*M_p**2)
+    phi=phi_star-P%n0*M_p**2/phi_star*lnrat
+    !phi_c=phi_star-n*M_p**2/phi_star*log(P%k_c/P%k_0_scalar)
+    A_s=P%Ld*1d-11/12/pi**2/P%n0**2*ABS(phi_star/M_p)**(P%n0+2)
+    n_s=1d0-2*(2d0+P%n0)/(4*P%N_star+P%n0)
+    if (P%model==1 .or. P%model==2) then
+        F_V=1d0+P%xi0**2/(1+exp(-2*P%c_H*(phi**2-P%phi_c**2)/M_p**2))
+        F_M=1d0+(9*P%c_H**2*P%xi0**2*phi**2*(exp(2*P%c_H*(phi**2-P%phi_c**2)/M_p**2)-1))/(M_p**2*cosh(2*P%c_H*(phi**2-&
+        P%phi_c**2)/M_p**2)*(exp(2*P%c_H*(phi**2-P%phi_c**2)/M_p**2)+1)**3)
+        ScalarPower=A_s*exp(lnrat*(n_s-1 + lnrat*(P%n_run(ix)/2 + P%n_runrun(ix)/6*lnrat)))*F_V*F_M
+    else if (P%model==0) then
+        ScalarPower=A_s*exp(lnrat*(n_s-1 + lnrat*(P%n_run(ix)/2 + P%n_runrun(ix)/6*lnrat)))
+    else
+    ScalarPower=P%ScalarPowerAmp(ix)*exp(lnrat*( P%an(ix)-1 + lnrat*(P%n_run(ix)/2 + P%n_runrun(ix)/6*lnrat)))
+    end if
+!modified
     end function ScalarPower
 
 
@@ -152,11 +182,36 @@
 
     real(dl) TensorPower,k
     real(dl), parameter :: PiByTwo=3.14159265d0/2._dl
+
+!modified
+    real(dl) F_V, phi
+    real(dl) phi_star, pi, G, A_t, n_t, M_p
+!modified
+
     integer ix
     real(dl) lnrat, k_dep
-
+!modified
     lnrat = log(k/P%k_0_tensor)
-    k_dep = exp(lnrat*(P%ant(ix) + P%nt_run(ix)/2*lnrat))
+
+    pi=3.14159265d0
+    G=6.67428d-11
+    M_p=1d0
+    phi_star=sqrt(P%n0/2*(4*P%N_star+P%n0)*M_p**2)
+    phi=phi_star-P%n0*M_p**2/phi_star*lnrat
+    !phi_c=phi_star-n*M_p**2/phi_star*log(P%k_c/P%k_0_scalar)
+    A_t=2d0*P%Ld*1d-11/3/pi**2*ABS(phi_star/M_p)**P%n0
+    n_t=-2d0*P%n0/(4*P%N_star+P%n0)
+
+    !k_dep = exp(lnrat*(P%ant(ix) + P%nt_run(ix)/2*lnrat))
+    k_dep = exp(lnrat*(n_t + P%nt_run(ix)/2*lnrat))
+    if (P%model==2) then
+        F_V=1d0+P%xi0**2/(1+exp(-2*P%c_H*(phi**2-P%phi_c**2)/M_p**2))
+        !F_M=1d0+(9*P%c_H**2*P%xi0**2*phi**2*(exp(2*P%c_H*(phi**2-P%phi_c**2)/M_p**2)-1))/(M_p**2*cosh(2*P%c_H*(phi**2-&
+        !P%phi_c**2)/M_p**2)*(exp(2*P%c_H*(phi**2-P%phi_c**2)/M_p**2)+1)**3)
+        TensorPower=A_t*k_dep*F_V
+    else if (P%model==0 .or. P%model==1) then
+        TensorPower=A_t*k_dep
+    else
     if (P%tensor_parameterization==tensor_param_indeptilt) then
         TensorPower = P%rat(ix)*P%ScalarPowerAmp(ix)*k_dep
     else if (P%tensor_parameterization==tensor_param_rpivot) then
@@ -165,6 +220,8 @@
         TensorPower = P%TensorPowerAmp(ix) * k_dep
     end if
     if (curv < 0) TensorPower=TensorPower*tanh(PiByTwo*sqrt(-k**2/curv-3))
+    end if
+!modified
 
     end function TensorPower
 
@@ -211,6 +268,15 @@
     Type(TIniFile) :: Ini
     logical, intent(in) :: WantTensors
     integer i
+!modified
+    InitPower%N_star = Ini_Read_Double_File(Ini,'N_star',InitPower%N_star)
+    InitPower%xi0 = Ini_Read_Double_File(Ini,'xi0',InitPower%xi0)
+    InitPower%c_H = Ini_Read_Double_File(Ini,'c_H',InitPower%c_H)
+    InitPower%phi_c = Ini_Read_Double_File(Ini,'phi_c',InitPower%phi_c)
+    InitPower%Ld = Ini_Read_Double_File(Ini,'Ld',InitPower%Ld)
+    InitPower%n0 = Ini_Read_Double_File(Ini,'n0',InitPower%n0)
+    InitPower%model = Ini_Read_Int_File(Ini,'model',InitPower%model)
+!modified
 
     InitPower%k_0_scalar = Ini_Read_Double_File(Ini,'pivot_scalar',InitPower%k_0_scalar)
     InitPower%k_0_tensor = Ini_Read_Double_File(Ini,'pivot_tensor',InitPower%k_0_tensor)

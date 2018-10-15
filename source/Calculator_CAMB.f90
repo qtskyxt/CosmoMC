@@ -26,6 +26,9 @@
     end Type CAMBTransferCache
 
     Type, extends(TCosmologyCalculator) :: CAMB_Calculator
+!modified
+integer model
+!modified
         integer :: ncalls = 0
         integer :: nerrors = 0
         logical :: CAMB_timing = .false.
@@ -50,7 +53,6 @@
     procedure :: BAO_D_v => CAMBCalc_BAO_D_v
     procedure :: AngularDiameterDistance => CAMBCalc_AngularDiameterDistance
     procedure :: ComovingRadialDistance => CAMBCalc_ComovingRadialDistance
-    procedure :: ComovingRadialDistanceArr => CAMBCalc_ComovingRadialDistanceArr
     procedure :: AngularDiameterDistance2 => CAMBCalc_AngularDiameterDistance2
     procedure :: LuminosityDistance => CAMBCalc_LuminosityDistance
     procedure :: Hofz => CAMBCalc_Hofz
@@ -86,7 +88,6 @@
     type(CAMBParams)  P
     real(dl) neff_massive_standard, mnu, m1, m3, normal_frac
     real(dl), external :: Newton_raphson
-
     P = this%CAMBP
     P%omegab = CMB%omb
     P%omegan = CMB%omnu
@@ -97,6 +98,7 @@
     P%Reion%delta_redshift = CMB%zre_delta
     w_lam = CMB%w
     wa_ppf = CMB%wa
+
     ALens = CMB%ALens
     ALens_Fiducial = CMB%ALensf
     P%InitialConditionVector(initial_iso_CDM) = &
@@ -127,17 +129,16 @@
     integer noutputs, i
 
     noutputs = size(BackgroundOutputs%z_outputs)
-    Theory%numderived = nthermo_derived + noutputs*2
+    Theory%numderived = nthermo_derived + noutputs*4
     if (Theory%numderived > max_derived_parameters) &
         call MpiStop('numderived > max_derived_parameters: increase in CosmologyTypes.f90')
     Theory%derived_parameters(1:nthermo_derived) = ThermoDerivedParams(1:nthermo_derived)
     do i=1, noutputs
-        !Theory%derived_parameters(nthermo_derived+(i-1)*3+1) = BackgroundOutputs%rs_by_D_v(i)
-        !now use Hubble paramter in normal units and DM, comoving angular diameter distance
-        Theory%derived_parameters(nthermo_derived+(i-1)*2+1) = BackgroundOutputs%H(i)*const_c/1e3_mcp
-        Theory%derived_parameters(nthermo_derived+(i-1)*2+2) = BackgroundOutputs%DA(i)*(1+BackgroundOutputs%z_outputs(i))
-        !Theory%derived_parameters(nthermo_derived+(i-1)*4+4) = (1+BackgroundOutputs%z_outputs(i))* &
-        !    BackgroundOutputs%DA(i) * BackgroundOutputs%H(i) !F_AP parameter
+        Theory%derived_parameters(nthermo_derived+(i-1)*4+1) = BackgroundOutputs%rs_by_D_v(i)
+        Theory%derived_parameters(nthermo_derived+(i-1)*4+2) = BackgroundOutputs%H(i)*const_c/1e3_mcp
+        Theory%derived_parameters(nthermo_derived+(i-1)*4+3) = BackgroundOutputs%DA(i)
+        Theory%derived_parameters(nthermo_derived+(i-1)*4+4) = (1+BackgroundOutputs%z_outputs(i))* &
+            BackgroundOutputs%DA(i) * BackgroundOutputs%H(i) !F_AP parameter
     end do
     end subroutine CAMBCalc_SetDerived
 
@@ -430,6 +431,9 @@
     end if
 
     if (CosmoSettings%compute_tensors) then
+!modified
+        Theory%tensor_ratio_0 = TensorPower(CosmoSettings%tensor_pivot_k,1)/ScalarPower(CosmoSettings%tensor_pivot_k,1)
+!modified
         Theory%tensor_ratio_02 = TensorPower(0.002d0,1)/ScalarPower(0.002d0,1)
         Theory%tensor_AT = TensorPower(CosmoSettings%tensor_pivot_k,1)
         Theory%tensor_ratio_BB = TensorPower(0.01d0,1)/ScalarPower(0.01d0,1)
@@ -489,7 +493,7 @@
             return
         end if
         allocate(Theory%MPK)
-        call Theory%MPK%InitExtrap(k,z,PK, CosmoSettings%extrap_kmax)
+        call Theory%MPK%Init(k,z,PK)
     end if
 
 
@@ -501,7 +505,7 @@
             return
         end if
         allocate(Theory%MPK_WEYL)
-        call Theory%MPK_WEYL%InitExtrap(k,z,PK,CosmoSettings%extrap_kmax)
+        call Theory%MPK_WEYL%Init(k,z,PK)
     end if
 
     if (CosmoSettings%use_SigmaR) then
@@ -567,13 +571,13 @@
         error = 1
         return
     end if
-    call Theory%NL_MPK%InitExtrap(Theory%MPK%x,Theory%MPK%y,PK,CosmoSettings%extrap_kmax)
+    call Theory%NL_MPK%Init(Theory%MPK%x,Theory%MPK%y,PK)
 
     if (allocated(Theory%MPK_WEYL)) then
         !Assume Weyl scales the same way under non-linear correction
         allocate(Theory%NL_MPK_WEYL)
         PK = Theory%MPK_WEYL%z + 2*log(Ratios)
-        call Theory%NL_MPK_WEYL%InitExtrap(Theory%MPK%x,Theory%MPK%y,PK,CosmoSettings%extrap_kmax)
+        call Theory%NL_MPK_WEYL%Init(Theory%MPK%x,Theory%MPK%y,PK)
     end if
 
     end subroutine CAMBCalc_GetNLandRatios
@@ -666,18 +670,6 @@
     CAMBCalc_ComovingRadialDistance = ComovingRadialDistance(z)
 
     end function CAMBCalc_ComovingRadialDistance
-
-    subroutine CAMBCalc_ComovingRadialDistanceArr(this, z, arr, n)
-    use CAMB, only : ComovingRadialDistanceArr  !!comoving radial distance also in Mpc no h units
-    class(CAMB_Calculator) :: this
-    integer, intent(in) :: n
-    real(mcp), intent(IN) :: z(n)
-    real(mcp), intent(out) :: arr(n)
-    !Note redshifts must be monotonically increasing    
-
-    call ComovingRadialDistanceArr(arr, z, n, 1d-4)
-
-    end subroutine CAMBCalc_ComovingRadialDistanceArr
 
     real(mcp) function CAMBCalc_AngularDiameterDistance2(this, z1, z2)
     use CAMB, only : AngularDiameterDistance2  !!angular diam distance also in Mpc no h units
@@ -827,6 +819,15 @@
         P%InitPower%k_0_scalar = CosmoSettings%pivot_k
         P%InitPower%k_0_tensor = CosmoSettings%tensor_pivot_k
         if (P%InitPower%k_0_tensor/=P%InitPower%k_0_scalar) P%InitPower%tensor_parameterization = tensor_param_rpivot
+!modified
+P%InitPower%c_H = CMB%c_H
+P%InitPower%xi0 = CMB%xi0
+P%InitPower%phi_c = CMB%phi_c
+P%InitPower%N_star = CMB%N_star
+P%InitPower%Ld = CMB%Ld
+P%InitPower%n0 = CMB%n0
+P%InitPower%model = this%model
+!modified
         P%InitPower%ScalarPowerAmp(ix) = cl_norm*CMB%InitPower(As_index)
         P%InitPower%rat(ix) = CMB%InitPower(amp_ratio_index)
 
@@ -861,7 +862,9 @@
     use NonLinear
     class(CAMB_Calculator) :: this
     class(TSettingIni) :: Ini
-
+!modified
+call Ini%Read('model',this%model)
+!modified
     call this%TCosmologyCalculator%ReadParams(Ini)
     this%calcName ='CAMB'
 
